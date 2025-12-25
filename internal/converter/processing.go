@@ -35,7 +35,8 @@ func (c *Converter) postprocessMarkdown(markdown string) string {
 func (c *Converter) extractImageReferences(html, pageID, baseURL string) []model.ImageRef {
 	var imageRefs []model.ImageRef
 
-	acImageRegex := regexp.MustCompile(`<ac:image[^>]*>[\s\S]*?</ac:image>`)
+//	acImageRegex := regexp.MustCompile(`<ac:image[^>]*>[\s\S]*?</ac:image>`)
+	acImageRegex := regexp.MustCompile(`<ri:attachment[^>]*(ri:filename="[^"]+)"`)
 	matches := acImageRegex.FindAllString(html, -1)
 
 	for _, imageHTML := range matches {
@@ -45,7 +46,7 @@ func (c *Converter) extractImageReferences(html, pageID, baseURL string) []model
 		}
 
 		encodedFilename := url.QueryEscape(fileName)
-		actualURL := fmt.Sprintf("%s/wiki/download/attachments/%s/%s",
+		actualURL := fmt.Sprintf("%s/download/attachments/%s/%s",
 			strings.TrimSuffix(baseURL, "/"), pageID, encodedFilename)
 
 		imageRefs = append(imageRefs, model.ImageRef{

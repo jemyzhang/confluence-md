@@ -3,8 +3,7 @@ package plugin
 import (
 	"fmt"
 	"log"
-	"net/url"
-	"strconv"
+//	"net/url"
 	"strings"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -13,6 +12,7 @@ import (
 	"github.com/jackchuka/confluence-md/internal/confluence/model"
 	"github.com/jackchuka/confluence-md/internal/converter/plugin/attachments"
 	"golang.org/x/net/html"
+	"github.com/gosimple/slug"
 )
 
 type ConfluencePlugin struct {
@@ -20,6 +20,7 @@ type ConfluencePlugin struct {
 	attachmentResolver attachments.Resolver
 	client             confluence.Client
 	currentPage        *model.ConfluencePage
+	baseURL            string
 	userCache          map[string]string // accountID -> displayName
 }
 
@@ -58,6 +59,10 @@ func (p *ConfluencePlugin) SetCurrentPage(page *model.ConfluencePage) {
 		// Extract and cache all user mentions from page content
 		p.extractAndCacheUsers(page)
 	}
+}
+
+func (p *ConfluencePlugin) SetBaseURL(baseURL string) {
+	p.baseURL = baseURL
 }
 
 // extractAndCacheUsers finds all user references in the page HTML and adds them to cache
@@ -526,7 +531,7 @@ func (p *ConfluencePlugin) handleImage(ctx converter.Context, w converter.Writer
 	// Build local path for the image
 	localPath := p.imageFolder + "/" + filename
 
-	_, _ = fmt.Fprintf(w, "![%s](%s)", filename, url.PathEscape(localPath))
+	_, _ = fmt.Fprintf(w, "![%s](%s)", filename, localPath) //url.PathEscape(localPath))
 
 	return converter.RenderSuccess
 }
@@ -585,7 +590,9 @@ func (p *ConfluencePlugin) handleMacro(ctx converter.Context, w converter.Writer
 		result = p.handleBlockquoteMacro(ctx, n, "💡", "Tip")
 	case "code":
 		result = p.handleCodeMacro(n)
-	case "mermaid-cloud":
+	case "noformat":
+		result = p.handleCodeMacro(n)
+	case "mermaid-macro":
 		result = p.handleMermaidMacro(n)
 	case "expand":
 		result = p.handleExpandMacro(ctx, n)
@@ -597,6 +604,12 @@ func (p *ConfluencePlugin) handleMacro(ctx converter.Context, w converter.Writer
 		result = p.handleStatusMacro(n)
 	case "children":
 		result = "<!-- Child Pages -->"
+	case "jira":
+		result = p.handleJiraMacro(n)
+	case "view-file":
+		result = p.handleViewFileMacro(n)
+	case "anchor":
+		result = p.handleAnchorMacro(n)
 	default:
 		result = fmt.Sprintf("<!-- Unsupported macro: %s -->", macroName)
 	}
@@ -656,6 +669,25 @@ func (p *ConfluencePlugin) handleCodeMacro(n *html.Node) string {
 	return fmt.Sprintf("```\n%s\n```\n", code)
 }
 
+func (p *ConfluencePlugin) handleJiraMacro(n *html.Node) string {
+	var buf strings.Builder
+	_ = html.Render(&buf, n)
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(buf.String()))
+	if err != nil {
+		return fmt.Sprintf("<!-- Error rendering macro: %s -->", err.Error())
+	}
+	selection := doc.Selection
+
+	jira := extractMacroParameter(selection, "key")
+
+	if p.baseURL != "" {
+		return fmt.Sprintf("[%s](%s/browse/%s)", 
+			jira, strings.Replace(p.baseURL, "confluence", "jira", 1), jira)
+	}
+
+	return fmt.Sprintf("%s", jira)
+}
+
 func (p *ConfluencePlugin) handleMermaidMacro(n *html.Node) string {
 	var buf strings.Builder
 	_ = html.Render(&buf, n)
@@ -665,28 +697,8 @@ func (p *ConfluencePlugin) handleMermaidMacro(n *html.Node) string {
 	}
 	selection := doc.Selection
 
-	filename := extractMacroParameter(selection, "filename")
-	revisionStr := extractMacroParameter(selection, "revision")
-	revision := 0
-	if revisionStr != "" {
-		if parsed, err := strconv.Atoi(strings.TrimSpace(revisionStr)); err == nil {
-			revision = parsed
-		}
-	}
+	diagram := selection.Find("ac\\:plain-text-body").First().Text()
 
-	if filename == "" {
-		return "<!-- Mermaid macro missing filename -->"
-	}
-	if p.attachmentResolver == nil {
-		return fmt.Sprintf("<!-- Mermaid attachment %s unavailable -->", filename)
-	}
-	if p.currentPage == nil {
-		return fmt.Sprintf("<!-- Mermaid attachment %s unavailable -->", filename)
-	}
-	diagram, err := p.attachmentResolver.Resolve(p.currentPage, filename, revision)
-	if err != nil {
-		return fmt.Sprintf("<!-- Failed to load mermaid %s: %v -->", filename, err)
-	}
 	diagram = strings.TrimSpace(diagram)
 	if diagram == "" {
 		return "<!-- Empty mermaid macro -->"
@@ -694,8 +706,40 @@ func (p *ConfluencePlugin) handleMermaidMacro(n *html.Node) string {
 	return fmt.Sprintf("```mermaid\n%s\n```\n", diagram)
 }
 
+func (p *ConfluencePlugin) handleViewFileMacro(n *html.Node) string {
+	var buf strings.Builder
+	_ = html.Render(&buf, n)
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(buf.String()))
+	if err != nil {
+		return fmt.Sprintf("<!-- Error rendering macro: %s -->", err.Error())
+	}
+
+	selection := doc.Find("ri\\:attachment")
+
+	if filename, exists := selection.Attr("ri:filename"); exists {
+		return fmt.Sprintf("[%s](%s/%s)", filename, p.imageFolder, filename)
+  } else {
+		return "<!-- file attachment not found -->"
+	}
+}
+
+func (p *ConfluencePlugin) handleAnchorMacro(n *html.Node) string {
+	var buf strings.Builder
+	_ = html.Render(&buf, n)
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(buf.String()))
+	if err != nil {
+		return fmt.Sprintf("<!-- Error rendering macro: %s -->", err.Error())
+	}
+
+	anchor := doc.Text()
+	if anchor == "" {
+		return "<!-- anchor macro has no anchor -->"
+	}
+	return fmt.Sprintf("<a name=%s></a>", slug.Make(anchor))
+}
+
 func (p *ConfluencePlugin) handleTocMacro(n *html.Node) (string, bool) {
-	result := "<!-- Table of Contents -->"
+	result := "[toc]"
 
 	// For TOC: check if it has parameter children or is self-closing
 	hasParameters := false
@@ -872,8 +916,33 @@ func (p *ConfluencePlugin) handleStatusMacro(n *html.Node) string {
 	return ""
 }
 
+func (p *ConfluencePlugin) handleAnchorLink(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	var buf strings.Builder
+	_ = html.Render(&buf, n)
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(buf.String()))
+	if err != nil {
+		return converter.RenderTryNext
+	}
+
+	selection := doc.Find("ac\\:link")
+	if anchor, exists := selection.Attr("ac:anchor"); exists {
+		linkText := selection.Find("ac\\:plain-text-link-body").Text()
+		linkText = strings.TrimSpace(linkText)
+		if linkText == "" {
+			return converter.RenderTryNext
+		}
+		_, _ = fmt.Fprintf(w, "[%s](#%s)", linkText, slug.Make(anchor))
+		return converter.RenderSuccess
+	}
+	return converter.RenderTryNext
+}
+
 // handleLink converts Confluence user links and other ac:link elements
 func (p *ConfluencePlugin) handleLink(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if status := p.handleAnchorLink(ctx, w, n); status != converter.RenderTryNext {
+		return converter.RenderSuccess
+	}
 	// Look for ri:user child node
 	for child := n.FirstChild; child != nil; child = child.NextSibling {
 		if child.Type == html.ElementNode && child.Data == "ri:user" {

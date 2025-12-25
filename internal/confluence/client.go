@@ -16,6 +16,7 @@ import (
 )
 
 type Client interface {
+  RetrievePageID(spaceKey, pageName string) (string, error)
 	GetPage(pageID string) (*model.ConfluencePage, error)
 	GetChildPages(pageID string) ([]*model.ConfluencePage, error)
 	DownloadAttachmentContent(attachment *model.ConfluenceAttachment) ([]byte, error)
@@ -44,10 +45,40 @@ func NewClient(baseURL, email, apiToken string) Client {
 	}
 }
 
+func (c *client) RetrievePageID(spaceKey, pageName string) (string, error) {
+	endpoint := fmt.Sprintf("/rest/api/content?spaceKey=%s&title=%s", spaceKey, pageName)
+	fullURL := c.baseURL + endpoint
+
+	resp, err := c.makeRequest("GET", fullURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve page ID: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", c.handleErrorResponse(resp, "retrieve page ID")
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode page ID response: %w", err)
+	}
+
+	// Get page ID from response
+	pageID, ok := result["results"].([]interface{})[0].(map[string]interface{})["id"].(string)
+	if !ok {
+		return "", fmt.Errorf("failed to retrieve page ID: %w", err)
+	}
+	return pageID, nil
+	
+}
+
 // GetPage retrieves a Confluence page by ID
 func (c *client) GetPage(pageID string) (*model.ConfluencePage, error) {
 	// Build URL with expansions to get all needed data
-	endpoint := fmt.Sprintf("/wiki/rest/api/content/%s", pageID)
+	endpoint := fmt.Sprintf("/rest/api/content/%s", pageID)
 	params := url.Values{
 		"expand": []string{
 			"body.storage,metadata.labels,version,space,history,children.attachment",
@@ -83,7 +114,7 @@ const defaultChildPageLimit = 100
 
 // GetChildPages retrieves all child pages for a given page ID
 func (c *client) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
-	endpoint := fmt.Sprintf("/wiki/rest/api/content/%s/child/page", pageID)
+	endpoint := fmt.Sprintf("/rest/api/content/%s/child/page", pageID)
 	params := url.Values{
 		"expand": []string{"body.storage,metadata.labels,version,space,history"},
 		"limit":  []string{strconv.Itoa(defaultChildPageLimit)},
@@ -146,10 +177,9 @@ func (c *client) makeRequest(method, url string, body io.Reader) (*http.Response
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set authentication
-	req.SetBasicAuth(c.email, c.apiToken)
-
 	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
+	//req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -175,13 +205,15 @@ func (c *client) DownloadAttachmentContent(attachment *model.ConfluenceAttachmen
 		return nil, err
 	}
 
+	fmt.Printf("Downloading attachment %s from %s\n", attachment.Title, downloadURL)
+
 	// Create request for binary content
 	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.SetBasicAuth(c.email, c.apiToken)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -215,11 +247,11 @@ func (c *client) normalizeDownloadLink(link string) (string, error) {
 	}
 
 	if strings.HasPrefix(link, "/download/") {
-		link = "/wiki" + link
+		link = "" + link
 	}
 
 	if strings.HasPrefix(link, "download/") {
-		link = "/wiki/" + link
+		link = "/" + link
 	}
 
 	if strings.Contains(link, " ") {
@@ -236,7 +268,7 @@ func (c *client) normalizeDownloadLink(link string) (string, error) {
 
 // GetUser retrieves user information by account ID
 func (c *client) GetUser(accountID string) (*model.ConfluenceUser, error) {
-	endpoint := fmt.Sprintf("/wiki/rest/api/user?accountId=%s", url.QueryEscape(accountID))
+	endpoint := fmt.Sprintf("/rest/api/user?accountId=%s", url.QueryEscape(accountID))
 	fullURL := c.baseURL + endpoint
 
 	resp, err := c.makeRequest("GET", fullURL, nil)

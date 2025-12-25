@@ -128,22 +128,32 @@ func urlToPageInfo(pageURL string) (confluenceModel.PageURLInfo, error) {
 	var title string
 
 	// Extract page ID from path
-	// Path format: /wiki/spaces/SPACE/pages/12345/Title
-	parts := strings.Split(u.Path, "/")
-	for i, part := range parts {
-		if part == "spaces" && i+1 < len(parts) {
-			spaceKey = parts[i+1]
-		}
-		if part == "pages" && i+1 < len(parts) {
-			pageID = parts[i+1]
-		}
-		if i == len(parts)-1 {
-			title = part
-		}
-	}
+	// Path format: 
+	// /display/SPACE/Title
+	// /pages/viewpage.action?pageId=622848016
+	if strings.HasPrefix(u.Path, "/display/") {
+		// 去除前缀后按 "/" 分割
+		// TrimPrefix 变成 "SPACE/Title"
+		// SplitN 限制分割次数，防止 Title 中包含 "/" 导致被截断（尽管 Title 通常不含 /）
+		parts := strings.SplitN(strings.TrimPrefix(u.Path, "/display/"), "/", 2)
 
-	if pageID == "" {
-		return confluenceModel.PageURLInfo{}, fmt.Errorf("could not extract page ID from URL")
+		if len(parts) == 2 {
+			spaceKey = parts[0]
+			title = parts[1] 
+			// 注意：u.Path 已经被自动解码了（例如 %20 会变成空格），所以这里不需要额外解码
+		} else {
+			return confluenceModel.PageURLInfo{}, fmt.Errorf("could not extract page space and title from URL")
+		}
+
+		// 情况 2: /pages/viewpage.action?pageId=...
+	} else if strings.Contains(u.Path, "viewpage.action") {
+		// 获取查询参数 (query params)
+		queryParams := u.Query()
+		if pageID = queryParams.Get("pageId"); pageID == "" {
+			return confluenceModel.PageURLInfo{}, fmt.Errorf("could not extract page id from URL")
+		}
+	} else {
+		return confluenceModel.PageURLInfo{}, fmt.Errorf("Invalid URL")
 	}
 
 	return confluenceModel.PageURLInfo{

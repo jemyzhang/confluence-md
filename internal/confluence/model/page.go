@@ -96,8 +96,7 @@ func (cp *ConfluencePage) GetURL(baseURL string) (string, error) {
 		return "", fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	pageURL := fmt.Sprintf("%s/wiki/spaces/%s/pages/%s/%s",
-		base.String(), cp.SpaceKey, cp.ID, url.PathEscape(cp.Title))
+	pageURL := fmt.Sprintf("%s/pages/viewpage.action?pageId=%s", base.String(), cp.ID)
 
 	return pageURL, nil
 }

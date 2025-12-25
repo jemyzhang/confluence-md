@@ -93,6 +93,13 @@ func runTreeCommand(_ *cobra.Command, args []string) error {
 
 	client := confluence.NewClient(pageInfo.BaseURL, treeOpts.Email, treeOpts.APIKey)
 
+	if pageInfo.PageID == "" {
+		pageInfo.PageID, err = client.RetrievePageID(pageInfo.SpaceKey, pageInfo.Title)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve page ID: %w", err)
+		}
+	}
+
 	if treeOpts.DryRun {
 		fmt.Println("🔍 Dry run mode - analyzing page tree...")
 		return performDryRun(client, pageInfo.PageID, &treeOpts)

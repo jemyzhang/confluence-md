@@ -15,7 +15,7 @@ import (
 	"github.com/jackchuka/confluence-md/internal/converter/plugin/attachments"
 )
 
-const maxImageSizeBytes = 10 * 1024 * 1024
+const maxImageSizeBytes = 50 * 1024 * 1024
 
 // Converter handles HTML to Markdown conversion
 type Converter struct {
@@ -86,6 +86,7 @@ func (c *Converter) ConvertPage(
 		return nil, fmt.Errorf("invalid page: %w", err)
 	}
 	c.plugin.SetCurrentPage(page)
+	c.plugin.SetBaseURL(baseURL)
 
 	// Create markdown document
 	doc, err := model.NewMarkdownDocument(page, baseURL)
