@@ -34,20 +34,18 @@ go install github.com/jackchuka/confluence-md/cmd/confluence-md@latest
 
 You'll need:
 
-- Your Confluence email address
 - A Confluence API token ([create one here](https://id.atlassian.com/manage-profile/security/api-tokens))
 
 ### Convert a Single Page
 
 ```bash
-confluence-md page <page-url> --email your-email@example.com --api-token your-api-token
+confluence-md page <page-url> --api-token your-api-token
 ```
 
 Example:
 
 ```bash
 confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title \
-  --email john.doe@company.com \
   --api-token your-api-token-here
 ```
 
@@ -56,7 +54,7 @@ confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/T
 Convert an entire page hierarchy:
 
 ```bash
-confluence-md tree <page-url> --email your-email@example.com --api-token your-api-token
+confluence-md tree <page-url> --api-token your-api-token
 ```
 
 ### Convert HTML Files
@@ -76,7 +74,6 @@ confluence-md html page.html
 
 ### Common Options
 
-- `--email, -e`: Your Confluence email address (**required**)
 - `--api-token, -t`: Your Confluence API token (**required**)
 - `--output, -o`: Output directory (default: current directory)
 - `--output-name-template`: Go template for the markdown filename (see below)
@@ -88,19 +85,18 @@ confluence-md html page.html
 
 ```bash
 # Convert to a specific directory
-confluence-md page <page-url> --email user@example.com --api-token token --output ./docs
+confluence-md page <page-url> --api-token token --output ./docs
 
 # Prefix filenames with the last updated date (YYYY-MM-DD-title.md)
 confluence-md page <page-url> \
-  --email user@example.com \
   --api-token token \
   --output-name-template "{{ .Page.UpdatedAt.Format \"2006-01-02\" }}-{{ .SlugTitle }}"
 
 # Convert without downloading images
-confluence-md page <page-url> --email user@example.com --api-token token --download-images=false
+confluence-md page <page-url> --api-token token --download-images=false
 
 # Convert entire page tree
-confluence-md tree <page-url> --email user@example.com --api-token token --output ./wiki
+confluence-md tree <page-url> --api-token token --output ./wiki
 ```
 
 ### Output name templates

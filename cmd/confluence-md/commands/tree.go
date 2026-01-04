@@ -58,7 +58,6 @@ func init() {
 
 	// Required flags
 	_ = treeCmd.MarkFlagRequired("api-token")
-	_ = treeCmd.MarkFlagRequired("email")
 
 	// Processing flags
 	treeCmd.Flags().IntVar(&treeOpts.MaxDepth, "depth", -1, "Maximum depth to traverse (-1 for unlimited)")
@@ -91,7 +90,7 @@ func runTreeCommand(_ *cobra.Command, args []string) error {
 	}
 	treeOpts.OutputNamer = namer
 
-	client := confluence.NewClient(pageInfo.BaseURL, treeOpts.Email, treeOpts.APIKey)
+	client := confluence.NewClient(pageInfo.BaseURL, treeOpts.APIKey)
 
 	if pageInfo.PageID == "" {
 		pageInfo.PageID, err = client.RetrievePageID(pageInfo.SpaceKey, pageInfo.Title)
@@ -344,7 +343,7 @@ func convertPageTree(client confluence.Client, node *PageNode, outputDir string,
 
 	// Create options for tree conversion (inherit from tree options)
 	conversionOpts := PageOptions{
-		authOptions:   authOptions{Email: opts.Email, APIKey: opts.APIKey},
+		authOptions:   authOptions{APIKey: opts.APIKey},
 		commonOptions: opts.commonOptions,
 		OutputNamer:   opts.OutputNamer,
 	}

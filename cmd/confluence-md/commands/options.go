@@ -6,12 +6,10 @@ import (
 
 type authOptions struct {
 	APIKey string
-	Email  string
 }
 
 func (a *authOptions) InitFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&a.APIKey, "api-token", "t", "", "Confluence API token (required)")
-	cmd.Flags().StringVarP(&a.Email, "email", "e", "", "Confluence user email (default: extracted from URL)")
 }
 
 type commonOptions struct {

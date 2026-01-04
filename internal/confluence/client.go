@@ -26,17 +26,15 @@ type Client interface {
 // client represents a Confluence API client
 type client struct {
 	baseURL    string
-	email      string
 	apiToken   string
 	httpClient *http.Client
 	userAgent  string
 }
 
 // NewClient creates a new Confluence API client
-func NewClient(baseURL, email, apiToken string) Client {
+func NewClient(baseURL, apiToken string) Client {
 	return &client{
 		baseURL:  strings.TrimSuffix(baseURL, "/"),
-		email:    email,
 		apiToken: apiToken,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,

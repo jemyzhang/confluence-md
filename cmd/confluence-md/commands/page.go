@@ -50,7 +50,6 @@ func init() {
 
 	// Required flags
 	_ = pageCmd.MarkFlagRequired("api-token")
-	_ = pageCmd.MarkFlagRequired("email")
 }
 
 func runPage(_ *cobra.Command, args []string) error {
@@ -73,7 +72,7 @@ func runPage(_ *cobra.Command, args []string) error {
 	pageOpts.OutputNamer = namer
 
 	// Create Confluence client
-	client := confluence.NewClient(pageInfo.BaseURL, pageOpts.Email, pageOpts.APIKey)
+	client := confluence.NewClient(pageInfo.BaseURL, pageOpts.APIKey)
 
 	if pageInfo.PageID == "" {
 		pageInfo.PageID, err = client.RetrievePageID(pageInfo.SpaceKey, pageInfo.Title)
